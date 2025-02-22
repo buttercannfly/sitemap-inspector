@@ -7,9 +7,9 @@ export default async function handler(
   res: NextApiResponse
 ) {
   // 验证请求来源
-  if (req.headers.authorization !== `Bearer ${process.env.CRON_SECRET_KEY}`) {
-    return res.status(401).json({ error: "Unauthorized" });
-  }
+  // if (req.headers.authorization !== `Bearer ${process.env.CRON_SECRET_KEY}`) {
+  //   return res.status(401).json({ error: "Unauthorized" });
+  // }
 
   try {
     const websites = await websiteApi.getAllWebsites();
