@@ -1,0 +1,15 @@
+name: Hourly Sitemap Check
+
+on:
+  schedule:
+    - cron: '0 * * * *'  # 每小时运行一次
+  workflow_dispatch:      # 允许手动触发
+
+jobs:
+  cron:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger sitemap check
+        run: |
+          curl -X POST ${{ secrets.APP_URL }}/api/cron \
+          -H "Authorization: Bearer ${{ secrets.CRON_SECRET_KEY }}"
