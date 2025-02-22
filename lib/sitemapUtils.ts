@@ -29,7 +29,7 @@ async function findSitemapInRobotsTxt(websiteUrl: string): Promise<string[]> {
       return sitemapUrls;
     }
   } catch (error) {
-    console.log("No robots.txt found or error parsing it");
+    console.log("No robots.txt found or error parsing it", error);
   }
   return [];
 }

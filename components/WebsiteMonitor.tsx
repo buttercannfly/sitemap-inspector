@@ -19,6 +19,7 @@ export default function WebsiteMonitor() {
       setWebsites(data);
     } catch (err) {
       setError('Failed to fetch websites');
+      console.log(err)
     }
   };
 
