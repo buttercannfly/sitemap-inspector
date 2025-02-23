@@ -65,6 +65,29 @@ export default function WebsiteMonitor() {
     }));
   };
 
+  function groupWebsitesByDomain(websites: Website[]) {
+    const groups: Record<string, Website[]> = {};
+    
+    websites.forEach(site => {
+      try {
+        const url = new URL(site.website);
+        const domain = url.hostname;
+        if (!groups[domain]) {
+          groups[domain] = [];
+        }
+        groups[domain].push(site);
+      } catch (error) {
+        // Handle invalid URLs
+        if (!groups['Other']) {
+          groups['Other'] = [];
+        }
+        groups['Other'].push(site);
+      }
+    });
+    
+    return groups;
+  }
+
   return (
     <div className="max-w-4xl mx-auto p-6">
       <form onSubmit={handleSubmit} className="mb-8">
@@ -88,69 +111,59 @@ export default function WebsiteMonitor() {
         {error && <p className="mt-2 text-red-500">{error}</p>}
       </form>
 
-      <div className="space-y-6">
-        {(websites??[]).map((site, index) => {
-          const previousSite = websites[index + 1];
-          const newUrls = previousSite 
-            ? compareUrls(site.urls, previousSite.urls)
-            : [];
-          const isExpanded = expandedSites[site.id] || false;
-          const urlsArray = site.urls.split(',').filter(Boolean);
-
-          return (
-            <div key={site.id} className="border rounded-lg p-4 bg-white dark:bg-gray-800">
-              <div className="flex items-center justify-between mb-2">
-                <div>
-                  <h3 className="text-lg font-semibold">{site.website}</h3>
-                  <p className="text-sm text-gray-500">
-                    Last updated: {new Date(site.created_at).toLocaleString()}
-                  </p>
-                </div>
-                <button
-                  onClick={() => toggleExpand(site.id)}
-                  className="px-3 py-1 text-sm bg-gray-100 dark:bg-gray-700 rounded hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
-                >
-                  {isExpanded ? 'Collapse' : 'Expand'}
-                </button>
-              </div>
-
-              {isExpanded && (
-                <div className="mt-4 border-t pt-4">
-                  {newUrls.length > 0 && (
-                    <>
-                      <p className="text-sm font-semibold mb-2">
-                        New URLs ({newUrls.length}):
-                      </p>
-                      <div className="space-y-1 mb-4">
-                        {newUrls.map((url) => (
-                          <div 
-                            key={url} 
-                            className="text-sm text-green-600 dark:text-green-400 break-all bg-green-50 dark:bg-green-900/20 p-2 rounded"
-                          >
-                            {url}
-                          </div>
-                        ))}
+      <div className="space-y-8">
+        {Object.entries(groupWebsitesByDomain(websites)).map(([domain, siteGroup]) => (
+          <div key={domain} className="border rounded-lg p-6 bg-white dark:bg-gray-800">
+            <h2 className="text-xl font-bold mb-4 pb-2 border-b">
+              {domain}
+              <span className="text-sm font-normal text-gray-500 ml-2">
+                ({siteGroup.length} {siteGroup.length === 1 ? 'site' : 'sites'})
+              </span>
+            </h2>
+            
+            <div className="space-y-4">
+              {siteGroup.map((site) => {
+                const newUrls = compareUrls(site.urls, site.previous_urls || '');
+                
+                return (
+                  <div key={site.id} className="border rounded-lg p-4 bg-gray-50 dark:bg-gray-700">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <h3 className="text-lg font-semibold">{site.website}</h3>
+                        <p className="text-sm text-gray-500">
+                          Last updated: {new Date(site.created_at).toLocaleString()}
+                        </p>
                       </div>
-                    </>
-                  )}
-                  <p className="text-sm font-semibold mb-2">
-                    All URLs ({urlsArray.length}):
-                  </p>
-                  <div className="space-y-1 max-h-60 overflow-y-auto">
-                    {urlsArray.map((url) => (
-                      <div 
-                        key={url} 
-                        className="text-sm text-gray-600 dark:text-gray-400 break-all"
+                      <a
+                        href={`/website/${site.id}`}
+                        className="px-3 py-1 text-sm bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors"
                       >
-                        {url}
+                        View URLs
+                      </a>
+                    </div>
+                    {newUrls.length > 0 && (
+                      <div className="mt-4">
+                        <p className="text-sm font-semibold text-green-600 dark:text-green-400">
+                          New URLs ({newUrls.length}):
+                        </p>
+                        <div className="mt-2 space-y-1">
+                          {newUrls.map((url) => (
+                            <div 
+                              key={url} 
+                              className="text-sm break-all bg-green-50 dark:bg-green-900/20 p-2 rounded"
+                            >
+                              {url}
+                            </div>
+                          ))}
+                        </div>
                       </div>
-                    ))}
+                    )}
                   </div>
-                </div>
-              )}
+                );
+              })}
             </div>
-          );
-        })}
+          </div>
+        ))}
       </div>
     </div>
   );

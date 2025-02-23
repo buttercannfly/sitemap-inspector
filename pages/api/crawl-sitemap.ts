@@ -16,6 +16,7 @@ export default async function handler(
 
     const urls = await fetchSitemapUrls(website.website);
     await websiteApi.updateWebsite(websiteId, {
+      previous_urls: website.urls,
       urls: urls.join(","),
       created_at: new Date().toISOString(),
     });
