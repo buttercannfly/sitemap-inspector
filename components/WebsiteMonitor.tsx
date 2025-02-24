@@ -7,6 +7,8 @@ export default function WebsiteMonitor() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [expandedSites, setExpandedSites] = useState<Record<number, boolean>>({});
+  const [expandedDomains, setExpandedDomains] = useState<Record<string, boolean>>({});
+  const [refreshingSites, setRefreshingSites] = useState<Record<number, boolean>>({});
 
   useEffect(() => {
     fetchWebsites();
@@ -65,6 +67,13 @@ export default function WebsiteMonitor() {
     }));
   };
 
+  const toggleDomain = (domain: string) => {
+    setExpandedDomains(prev => ({
+      ...prev,
+      [domain]: !prev[domain]
+    }));
+  };
+
   function groupWebsitesByDomain(websites: Website[]) {
     const groups: Record<string, Website[]> = {};
     
@@ -87,6 +96,31 @@ export default function WebsiteMonitor() {
     
     return groups;
   }
+
+  const getUrlCount = (urlString: string): number => {
+    return urlString.split(',').filter(Boolean).length;
+  };
+
+  const handleRefresh = async (siteId: number) => {
+    setRefreshingSites(prev => ({ ...prev, [siteId]: true }));
+    try {
+      const response = await fetch('/api/crawl-sitemap', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ websiteId: siteId }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to refresh sitemap');
+      }
+
+      await fetchWebsites();
+    } catch (error) {
+      console.error('Error refreshing sitemap:', error);
+    } finally {
+      setRefreshingSites(prev => ({ ...prev, [siteId]: false }));
+    }
+  };
 
   return (
     <div className="max-w-4xl mx-auto p-6">
@@ -114,54 +148,99 @@ export default function WebsiteMonitor() {
       <div className="space-y-8">
         {Object.entries(groupWebsitesByDomain(websites)).map(([domain, siteGroup]) => (
           <div key={domain} className="border rounded-lg p-6 bg-white dark:bg-gray-800">
-            <h2 className="text-xl font-bold mb-4 pb-2 border-b">
-              {domain}
-              <span className="text-sm font-normal text-gray-500 ml-2">
-                ({siteGroup.length} {siteGroup.length === 1 ? 'site' : 'sites'})
-              </span>
-            </h2>
+            <button 
+              onClick={() => toggleDomain(domain)}
+              className="w-full flex items-center justify-between text-left"
+            >
+              <h2 className="text-xl font-bold pb-2">
+                {domain}
+                <span className="text-sm font-normal text-gray-500 ml-2">
+                  ({siteGroup.length} {siteGroup.length === 1 ? 'site' : 'sites'})
+                </span>
+              </h2>
+              <svg 
+                className={`w-6 h-6 transform transition-transform ${expandedDomains[domain] ? 'rotate-180' : ''}`} 
+                fill="none" 
+                stroke="currentColor" 
+                viewBox="0 0 24 24"
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+              </svg>
+            </button>
             
-            <div className="space-y-4">
-              {siteGroup.map((site) => {
-                const newUrls = compareUrls(site.urls, site.previous_urls || '');
-                
-                return (
-                  <div key={site.id} className="border rounded-lg p-4 bg-gray-50 dark:bg-gray-700">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <h3 className="text-lg font-semibold">{site.website}</h3>
-                        <p className="text-sm text-gray-500">
-                          Last updated: {new Date(site.created_at).toLocaleString()}
-                        </p>
-                      </div>
-                      <a
-                        href={`/website/${site.id}`}
-                        className="px-3 py-1 text-sm bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors"
-                      >
-                        View URLs
-                      </a>
-                    </div>
-                    {newUrls.length > 0 && (
-                      <div className="mt-4">
-                        <p className="text-sm font-semibold text-green-600 dark:text-green-400">
-                          New URLs ({newUrls.length}):
-                        </p>
-                        <div className="mt-2 space-y-1">
-                          {newUrls.map((url) => (
-                            <div 
-                              key={url} 
-                              className="text-sm break-all bg-green-50 dark:bg-green-900/20 p-2 rounded"
-                            >
-                              {url}
-                            </div>
-                          ))}
+            {expandedDomains[domain] && (
+              <div className="space-y-4 mt-4">
+                {siteGroup.map((site) => {
+                  const newUrls = compareUrls(site.urls, site.previous_urls || '');
+                  
+                  return (
+                    <div key={site.id} className="border rounded-lg p-4 bg-gray-50 dark:bg-gray-700">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <h3 className="text-lg font-semibold">{site.website}</h3>
+                          <p className="text-sm text-gray-500">
+                            Last updated: {new Date(site.created_at).toLocaleString()}
+                          </p>
+                          <p className="text-sm text-gray-500">
+                            Total URLs: {getUrlCount(site.urls)}
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={(e) => {
+                              e.preventDefault();
+                              handleRefresh(site.id);
+                            }}
+                            disabled={refreshingSites[site.id]}
+                            className="px-3 py-1 text-sm bg-gray-200 text-gray-700 rounded hover:bg-gray-300 transition-colors disabled:opacity-50 flex items-center gap-1"
+                          >
+                            {refreshingSites[site.id] ? (
+                              <>
+                                <svg className="animate-spin h-4 w-4 text-gray-700" viewBox="0 0 24 24">
+                                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                                </svg>
+                                <span>刷新中</span>
+                              </>
+                            ) : (
+                              <>
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                                </svg>
+                                <span>重新抓取</span>
+                              </>
+                            )}
+                          </button>
+                          <a
+                            href={`/website/${site.id}`}
+                            className="px-3 py-1 text-sm bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors"
+                          >
+                            View URLs
+                          </a>
                         </div>
                       </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
+                      {newUrls.length > 0 && (
+                        <div className="mt-4">
+                          <p className="text-sm font-semibold text-green-600 dark:text-green-400">
+                            New URLs ({newUrls.length}):
+                          </p>
+                          <div className="mt-2 space-y-1">
+                            {newUrls.map((url) => (
+                              <div 
+                                key={url} 
+                                className="text-sm break-all bg-green-50 dark:bg-green-900/20 p-2 rounded"
+                              >
+                                {url}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
         ))}
       </div>
