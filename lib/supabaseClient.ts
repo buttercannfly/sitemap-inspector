@@ -18,5 +18,5 @@ export interface Website {
   created_at: string;
   website: string;
   urls: string;
-  previous_urls?: string;
+  previous_urls: string;
 }

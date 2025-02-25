@@ -172,6 +172,7 @@ export default function WebsiteMonitor() {
               <div className="space-y-4 mt-4">
                 {siteGroup.map((site) => {
                   const newUrls = compareUrls(site.urls, site.previous_urls || '');
+                  console.log(newUrls)
                   
                   return (
                     <div key={site.id} className="border rounded-lg p-4 bg-gray-50 dark:bg-gray-700">
@@ -230,7 +231,14 @@ export default function WebsiteMonitor() {
                                 key={url} 
                                 className="text-sm break-all bg-green-50 dark:bg-green-900/20 p-2 rounded"
                               >
-                                {url}
+                                <a 
+                                  href={url}
+                                  target="_blank"
+                                  rel="noopener noreferrer" 
+                                  className="text-blue-600 hover:underline"
+                                >
+                                  {url}
+                                </a>
                               </div>
                             ))}
                           </div>

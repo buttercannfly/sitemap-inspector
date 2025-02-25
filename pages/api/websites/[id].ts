@@ -1,16 +1,18 @@
-import type { NextApiRequest, NextApiResponse } from 'next';
-import { websiteApi } from '@/lib/api';
+import type { NextApiRequest, NextApiResponse } from "next";
+import { websiteApi } from "@/lib/api";
 
 export default async function handler(
   req: NextApiRequest,
   res: NextApiResponse
 ) {
   const { id } = req.query;
+  console.log("id");
+  console.log(id);
 
   try {
     const website = await websiteApi.getWebsiteById(Number(id));
     res.status(200).json(website);
   } catch (error) {
-    res.status(500).json({ error: 'Failed to fetch website' });
+    res.status(500).json({ error: "Failed to fetch website" });
   }
-} 
+}
