@@ -11,15 +11,11 @@ export default async function handler(
   }
 
   try {
-    const { websiteId } = req.body;
-    const website = await websiteApi.getWebsiteById(websiteId);
+    const { website } = req.body;
+    // const website = await websiteApi.getWebsiteById(websiteId);
 
-    const urls = await fetchSitemapUrls(website.website);
-    await websiteApi.updateWebsite(websiteId, {
-      // previous_urls: website.urls,
-      urls: urls.join(","),
-      created_at: new Date().toISOString(),
-    });
+    const urls = await fetchSitemapUrls(website);
+    await websiteApi.addWebsite(website, urls.join(","));
 
     res.status(200).json({ success: true });
   } catch (error) {

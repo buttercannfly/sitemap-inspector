@@ -13,6 +13,20 @@ export const websiteApi = {
     return data as Website[];
   },
 
+  async getAllDistinctWebsites() {
+    const { data, error } = await supabase
+      .from("website")
+      .select("website") // 只选择 website 字段
+      .order("created_at", { ascending: false })
+      .neq("website", null); // 可选：排除空值
+
+    if (error) throw error;
+
+    // 提取 website 值并去重
+    const uniqueWebsites = [...new Set(data.map((item) => item.website))];
+    return uniqueWebsites as string[];
+  },
+
   // 添加新网站
   async addWebsite(website: string, urls: string) {
     const { data, error } = await supabase

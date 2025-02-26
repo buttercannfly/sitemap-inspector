@@ -12,7 +12,7 @@ export default async function handler(
   // }
 
   try {
-    const websites = await websiteApi.getAllWebsites();
+    const websites = await websiteApi.getAllDistinctWebsites();
 
     // 并行处理所有网站的爬取
     await Promise.all(
@@ -22,12 +22,12 @@ export default async function handler(
           {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ websiteId: website.id }),
+            body: JSON.stringify({ website: website }),
           }
         );
 
         if (!response.ok) {
-          throw new Error(`Failed to crawl ${website.website}`);
+          throw new Error(`Failed to crawl ${website}`);
         }
       })
     );
