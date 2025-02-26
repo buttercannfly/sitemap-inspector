@@ -10,16 +10,18 @@ export default async function handler(
     return res.status(405).json({ error: "Method not allowed" });
   }
 
-  try {
-    const { website } = req.body;
-    // const website = await websiteApi.getWebsiteById(websiteId);
+  const { website } = req.body;
 
-    const urls = await fetchSitemapUrls(website);
-    await websiteApi.addWebsite(website, urls.join(","));
+  // 立即返回响应
+  res.status(200).json({ success: true });
 
-    res.status(200).json({ success: true });
-  } catch (error) {
-    console.error("Error crawling sitemap:", error);
-    res.status(500).json({ error: "Failed to crawl sitemap" });
-  }
+  // 异步操作在后台进行
+  Promise.resolve()
+    .then(async () => {
+      const urls = await fetchSitemapUrls(website);
+      await websiteApi.addWebsite(website, urls.join(","));
+    })
+    .catch((error) => {
+      console.error("Error crawling sitemap:", error);
+    });
 }
