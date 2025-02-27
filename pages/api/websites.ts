@@ -19,8 +19,13 @@ export default async function handler(
         const newWebsite = await websiteApi.addWebsite(website, urlString);
         return res.status(201).json(newWebsite);
 
+      case "DELETE":
+        const { id } = req.body; // 假设传入的请求体中包含要删除的 ID
+        await websiteApi.deleteWebsite(id);
+        return res.status(204).end(); // No Content
+
       default:
-        res.setHeader("Allow", ["GET", "POST"]);
+        res.setHeader("Allow", ["GET", "POST", "DELETE"]);
         return res.status(405).end(`Method ${req.method} Not Allowed`);
     }
   } catch (error) {

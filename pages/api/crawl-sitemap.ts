@@ -11,6 +11,7 @@ export default async function handler(
   }
 
   const { website } = req.body;
+  console.log("process:" + website);
 
   // 立即返回响应
   res.status(200).json({ success: true });

@@ -101,13 +101,13 @@ export default function WebsiteMonitor() {
     return urlString.split(',').filter(Boolean).length;
   };
 
-  const handleRefresh = async (siteId: number) => {
-    setRefreshingSites(prev => ({ ...prev, [siteId]: true }));
+  const handleRefresh = async (site: Website) => {
+    setRefreshingSites(prev => ({ ...prev, [site.id]: true }));
     try {
       const response = await fetch('/api/crawl-sitemap', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ websiteId: siteId }),
+        body: JSON.stringify({ website: site.website }),
       });
 
       if (!response.ok) {
@@ -118,7 +118,26 @@ export default function WebsiteMonitor() {
     } catch (error) {
       console.error('Error refreshing sitemap:', error);
     } finally {
-      setRefreshingSites(prev => ({ ...prev, [siteId]: false }));
+      setRefreshingSites(prev => ({ ...prev, [site.id]: false }));
+    }
+  };
+
+  const handleDelete = async (siteId: number) => {
+    if (confirm("Are you sure you want to delete this website?")) {
+      try {
+        const response = await fetch(`/api/websites/${siteId}`, {
+          method: 'DELETE',
+        });
+
+        if (!response.ok) {
+          throw new Error('Failed to delete website');
+        }
+
+        await fetchWebsites(); // 重新获取网站列表
+      } catch (error) {
+        setError('Failed to delete website');
+        console.error(error);
+      }
     }
   };
 
@@ -190,7 +209,7 @@ export default function WebsiteMonitor() {
                           <button
                             onClick={(e) => {
                               e.preventDefault();
-                              handleRefresh(site.id);
+                              handleRefresh(site);
                             }}
                             disabled={refreshingSites[site.id]}
                             className="px-3 py-1 text-sm bg-gray-200 text-gray-700 rounded hover:bg-gray-300 transition-colors disabled:opacity-50 flex items-center gap-1"
@@ -211,6 +230,12 @@ export default function WebsiteMonitor() {
                                 <span>重新抓取</span>
                               </>
                             )}
+                          </button>
+                          <button
+                            onClick={() => handleDelete(site.id)}
+                            className="px-3 py-1 text-sm bg-red-500 text-white rounded hover:bg-red-600"
+                          >
+                            删除
                           </button>
                           <a
                             href={`/website/${site.id}`}

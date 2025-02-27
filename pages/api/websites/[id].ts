@@ -10,8 +10,20 @@ export default async function handler(
   console.log(id);
 
   try {
-    const website = await websiteApi.getWebsiteById(Number(id));
-    res.status(200).json(website);
+    switch (req.method) {
+      case "DELETE":
+        await websiteApi.deleteWebsite(Number(id));
+        return res.status(204).end(); // No Content
+
+      case "GET":
+        const website = await websiteApi.getWebsiteById(Number(id));
+        res.status(200).json(website);
+        break;
+
+      default:
+        res.setHeader("Allow", ["GET", "DELETE"]);
+        res.status(405).end(`Method ${req.method} Not Allowed`);
+    }
   } catch (error) {
     res.status(500).json({ error: "Failed to fetch website" });
   }
