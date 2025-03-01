@@ -10,7 +10,15 @@ export const websiteApi = {
 
     console.log(data);
     if (error) throw error;
-    return data as Website[];
+    const arr: Website[] = []
+    data.forEach(x=>{
+      arr.push({
+        ...x,
+        urls: "",
+        url_count: x.urls.split(",").length
+      })
+    })
+    return arr as Website[];
   },
 
   async getAllDistinctWebsites() {

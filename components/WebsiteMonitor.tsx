@@ -202,7 +202,7 @@ export default function WebsiteMonitor() {
                             Last updated: {new Date(site.created_at).toLocaleString()}
                           </p>
                           <p className="text-sm text-gray-500">
-                            Total URLs: {getUrlCount(site.urls)}
+                            Total URLs: {site.url_count}
                           </p>
                         </div>
                         <div className="flex items-center gap-2">
