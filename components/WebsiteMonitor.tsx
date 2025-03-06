@@ -16,9 +16,10 @@ export default function WebsiteMonitor() {
     total: 0
   });
   
+  // 使用useEffect监听分页状态变化，然后获取数据
   useEffect(() => {
     fetchWebsites();
-  }, []); 
+  }, [pagination.page, pagination.pageSize]); 
 
   const fetchWebsites = async () => {
     try {
@@ -60,7 +61,8 @@ export default function WebsiteMonitor() {
         throw new Error(errorData.error || 'Failed to add website');
       }
 
-      await fetchWebsites();
+      // 重置为第一页并更新数据
+      setPagination(prev => ({ ...prev, page: 1 }));
       setWebsite('');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to add website');
@@ -69,25 +71,18 @@ export default function WebsiteMonitor() {
     }
   };
 
-  // 添加分页控制函数
+  // 分页控制函数 - 只更新状态，不直接调用fetchWebsites
   const handlePageChange = (newPage: number) => {
-    setPagination(prev => ({ 
-      ...prev, 
-      page: newPage 
-    }));
-    // 直接在这里调用 fetchWebsites，而不是依赖 useEffect
-    fetchWebsites();
+    const totalPages = Math.ceil(pagination.total / pagination.pageSize);
+    if (newPage < 1 || newPage > totalPages) return; // Prevent out-of-bounds
+    setPagination(prev => ({ ...prev, page: newPage }));
   };
 
+  // 页面大小控制函数 - 只更新状态，不直接调用fetchWebsites
   const handlePageSizeChange = (newSize: number) => {
-    setPagination(prev => ({ 
-      ...prev, 
-      pageSize: newSize, 
-      page: 1 
-    }));
-    // 直接在这里调用 fetchWebsites
-    fetchWebsites();
+    setPagination(prev => ({ ...prev, pageSize: newSize, page: 1 }));
   };
+
   const compareUrls = (current: string, previous: string) => {
     if (!previous) return [];
     const currentUrls = new Set(current.split(',').filter(Boolean));
@@ -111,7 +106,6 @@ export default function WebsiteMonitor() {
 
   function groupWebsitesByDomain(websites: Website[]) {
     const groups: Record<string, Website[]> = {};
-    console.log(websites)
     
     websites.forEach(site => {
       try {
@@ -169,7 +163,16 @@ export default function WebsiteMonitor() {
           throw new Error('Failed to delete website');
         }
 
-        await fetchWebsites(); // 重新获取网站列表
+        // 只更新状态，让useEffect触发获取数据
+        setPagination(prev => {
+          // 计算新的总页数
+          const totalPages = Math.ceil((prev.total - 1) / prev.pageSize);
+          // 如果当前页大于总页数，则回到最后一页
+          return { 
+            ...prev, 
+            page: prev.page > totalPages && totalPages > 0 ? totalPages : prev.page 
+          };
+        });
       } catch (error) {
         setError('Failed to delete website');
         console.error(error);
@@ -227,7 +230,6 @@ export default function WebsiteMonitor() {
               <div className="space-y-4 mt-4">
                 {siteGroup.map((site) => {
                   const newUrls = compareUrls(site.urls, site.previous_urls || '');
-                  console.log(newUrls)
                   
                   return (
                     <div key={site.id} className="border rounded-lg p-4 bg-gray-50 dark:bg-gray-700">
@@ -367,4 +369,4 @@ export default function WebsiteMonitor() {
     </div>
     </div>
   );
-} 
+}
