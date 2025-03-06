@@ -87,7 +87,7 @@ export default function WebsiteDetail() {
           </div>
         )}
         
-        <div>
+        {/* <div>
           <h2 className="text-xl font-semibold mb-4">
             All URLs ({urlsArray.length})
           </h2>
@@ -108,7 +108,7 @@ export default function WebsiteDetail() {
               </div>
             ))}
           </div>
-        </div>
+        </div> */}
 
        
       </div>
