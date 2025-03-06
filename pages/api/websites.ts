@@ -9,7 +9,9 @@ export default async function handler(
   try {
     switch (req.method) {
       case "GET":
-        const websites = await websiteApi.getAllWebsites();
+        const page = Number(req.query.page) || 1;
+        const pageSize = Number(req.query.pageSize) || 10;
+        const websites = await websiteApi.getRecentWebsites(page, pageSize);
         return res.status(200).json(websites);
 
       case "POST":

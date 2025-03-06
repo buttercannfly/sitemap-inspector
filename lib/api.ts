@@ -2,16 +2,22 @@ import { supabase, Website } from "./supabaseClient";
 
 export const websiteApi = {
   // 获取所有网站
-  async getAllWebsites() {
-    const { data, error } = await supabase
-      .from("website")
-      .select("*")
-      .order("created_at", { ascending: false });
+  async getRecentWebsites(page = 1, pageSize = 10) {
+    const from = (page - 1) * pageSize;
+    const to = from + pageSize - 1;
 
-    console.log(data);
+    const { data, error, count } = await supabase
+      .from("recent_website_scrapes")
+      .select("id, created_at, website, url_count", { count: "exact" })
+      .filter("rn", "lte", 3) // 只取每个网站的前三次抓取
+      .order("website", { ascending: true })
+      .order("created_at", { ascending: false })
+      .range(from, to); // 分页
+
     if (error) throw error;
-    return data as Website[];
-  },
+
+    return { data, total: count };
+  }, 
 
   async getAllDistinctWebsites() {
     const { data, error } = await supabase
@@ -96,5 +102,16 @@ export const websiteApi = {
       ...currentData,
       previous_urls: previousRecord ? previousRecord.urls : "",
     } as Website;
+  },
+
+  // 获取所有网站（不包括 urls 字段）
+  async getAllWebsitesWithoutUrls() {
+    const { data, error } = await supabase
+      .from("website")
+      .select("id, created_at, website") // 只选择 id, created_at 和 website 字段
+      .order("created_at", { ascending: false });
+
+    if (error) throw error;
+    return data as Website[];
   },
 };

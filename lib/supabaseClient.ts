@@ -19,4 +19,5 @@ export interface Website {
   website: string;
   urls: string;
   previous_urls: string;
+  url_count: number;
 }

@@ -9,19 +9,32 @@ export default function WebsiteMonitor() {
   const [expandedSites, setExpandedSites] = useState<Record<number, boolean>>({});
   const [expandedDomains, setExpandedDomains] = useState<Record<string, boolean>>({});
   const [refreshingSites, setRefreshingSites] = useState<Record<number, boolean>>({});
-
+  const [pagination, setPagination] = useState({
+    page: 1,
+    pageSize: 10,
+    total: 0
+  });
+  
   useEffect(() => {
     fetchWebsites();
   }, []);
 
   const fetchWebsites = async () => {
     try {
-      const response = await fetch('/api/websites');
+      const response = await fetch(`/api/websites?page=${pagination.page}&pageSize=${pagination.pageSize}`);
       const data = await response.json();
-      setWebsites(data);
+      
+      // 确保我们处理的是数组
+      if (data && data.data) {
+        setWebsites(data.data);
+        setPagination(prev => ({ ...prev, total: data.total || 0 }));
+      } else {
+        setWebsites([]);
+        setError('Invalid data format received');
+      }
     } catch (err) {
       setError('Failed to fetch websites');
-      console.log(err)
+      console.log(err);
     }
   };
 
@@ -53,6 +66,16 @@ export default function WebsiteMonitor() {
     }
   };
 
+  // 添加分页控制函数
+  const handlePageChange = (newPage: number) => {
+    setPagination(prev => ({ ...prev, page: newPage }));
+    fetchWebsites();
+  };
+
+  const handlePageSizeChange = (newSize: number) => {
+    setPagination(prev => ({ ...prev, pageSize: newSize, page: 1 }));
+    fetchWebsites();
+  };
   const compareUrls = (current: string, previous: string) => {
     if (!previous) return [];
     const currentUrls = new Set(current.split(',').filter(Boolean));
@@ -76,6 +99,7 @@ export default function WebsiteMonitor() {
 
   function groupWebsitesByDomain(websites: Website[]) {
     const groups: Record<string, Website[]> = {};
+    console.log(websites)
     
     websites.forEach(site => {
       try {
@@ -202,7 +226,7 @@ export default function WebsiteMonitor() {
                             Last updated: {new Date(site.created_at).toLocaleString()}
                           </p>
                           <p className="text-sm text-gray-500">
-                            Total URLs: {getUrlCount(site.urls)}
+                            Total URLs: {site.url_count}
                           </p>
                         </div>
                         <div className="flex items-center gap-2">
@@ -277,6 +301,42 @@ export default function WebsiteMonitor() {
           </div>
         ))}
       </div>
+
+      <div className="mt-8 flex items-center justify-between">
+      <div className="flex items-center gap-4">
+        <select
+          value={pagination.pageSize}
+          onChange={(e) => handlePageSizeChange(Number(e.target.value))}
+          className="px-2 py-1 border rounded"
+        >
+          <option value={10}>10 per page</option>
+          <option value={20}>20 per page</option>
+          <option value={50}>50 per page</option>
+        </select>
+        <span className="text-sm text-gray-600">
+          Showing {(pagination.page - 1) * pagination.pageSize + 1} -{' '}
+          {Math.min(pagination.page * pagination.pageSize, pagination.total)} of{' '}
+          {pagination.total} websites
+        </span>
+      </div>
+      
+      <div className="flex gap-2">
+        <button
+          onClick={() => handlePageChange(pagination.page - 1)}
+          disabled={pagination.page === 1}
+          className="px-4 py-2 bg-gray-200 rounded disabled:opacity-50"
+        >
+          Previous
+        </button>
+        <button
+          onClick={() => handlePageChange(pagination.page + 1)}
+          disabled={pagination.page * pagination.pageSize >= pagination.total}
+          className="px-4 py-2 bg-gray-200 rounded disabled:opacity-50"
+        >
+          Next
+        </button>
+      </div>
+    </div>
     </div>
   );
 } 
