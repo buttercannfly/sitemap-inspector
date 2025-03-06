@@ -9,6 +9,7 @@ export default function WebsiteMonitor() {
   const [expandedSites, setExpandedSites] = useState<Record<number, boolean>>({});
   const [expandedDomains, setExpandedDomains] = useState<Record<string, boolean>>({});
   const [refreshingSites, setRefreshingSites] = useState<Record<number, boolean>>({});
+  const [paginationLoading, setPaginationLoading] = useState(false);
   const [pagination, setPagination] = useState({
     page: 1,
     pageSize: 10,
@@ -17,14 +18,14 @@ export default function WebsiteMonitor() {
   
   useEffect(() => {
     fetchWebsites();
-  }, [pagination.page, pagination.pageSize]); 
+  }, []); 
 
   const fetchWebsites = async () => {
     try {
+      setPaginationLoading(true);
       const response = await fetch(`/api/websites?page=${pagination.page}&pageSize=${pagination.pageSize}`);
       const data = await response.json();
       
-      // 确保我们处理的是数组
       if (data && data.data) {
         setWebsites(data.data);
         setPagination(prev => ({ ...prev, total: data.total || 0 }));
@@ -35,6 +36,8 @@ export default function WebsiteMonitor() {
     } catch (err) {
       setError('Failed to fetch websites');
       console.log(err);
+    } finally {
+      setPaginationLoading(false);
     }
   };
 
@@ -68,12 +71,21 @@ export default function WebsiteMonitor() {
 
   // 添加分页控制函数
   const handlePageChange = (newPage: number) => {
-    setPagination(prev => ({ ...prev, page: newPage }));
+    setPagination(prev => ({ 
+      ...prev, 
+      page: newPage 
+    }));
+    // 直接在这里调用 fetchWebsites，而不是依赖 useEffect
     fetchWebsites();
   };
 
   const handlePageSizeChange = (newSize: number) => {
-    setPagination(prev => ({ ...prev, pageSize: newSize, page: 1 }));
+    setPagination(prev => ({ 
+      ...prev, 
+      pageSize: newSize, 
+      page: 1 
+    }));
+    // 直接在这里调用 fetchWebsites
     fetchWebsites();
   };
   const compareUrls = (current: string, previous: string) => {
@@ -314,26 +326,42 @@ export default function WebsiteMonitor() {
           <option value={50}>50 per page</option>
         </select>
         <span className="text-sm text-gray-600">
-          Showing {(pagination.page - 1) * pagination.pageSize + 1} -{' '}
-          {Math.min(pagination.page * pagination.pageSize, pagination.total)} of{' '}
-          {pagination.total} websites
+          {paginationLoading ? (
+            'Loading...'
+          ) : (
+            `Showing ${(pagination.page - 1) * pagination.pageSize + 1} - 
+            ${Math.min(pagination.page * pagination.pageSize, pagination.total)} of 
+            ${pagination.total} websites`
+          )}
         </span>
       </div>
       
       <div className="flex gap-2">
         <button
           onClick={() => handlePageChange(pagination.page - 1)}
-          disabled={pagination.page === 1}
-          className="px-4 py-2 bg-gray-200 rounded disabled:opacity-50"
+          disabled={pagination.page === 1 || paginationLoading}
+          className="px-4 py-2 bg-gray-200 rounded disabled:opacity-50 flex items-center gap-2"
         >
+          {paginationLoading && (
+            <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+            </svg>
+          )}
           Previous
         </button>
         <button
           onClick={() => handlePageChange(pagination.page + 1)}
-          disabled={pagination.page * pagination.pageSize >= pagination.total}
-          className="px-4 py-2 bg-gray-200 rounded disabled:opacity-50"
+          disabled={pagination.page >= Math.ceil(pagination.total / pagination.pageSize) || paginationLoading}
+          className="px-4 py-2 bg-gray-200 rounded disabled:opacity-50 flex items-center gap-2"
         >
           Next
+          {paginationLoading && (
+            <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+            </svg>
+          )}
         </button>
       </div>
     </div>
