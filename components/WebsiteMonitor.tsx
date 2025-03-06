@@ -17,7 +17,7 @@ export default function WebsiteMonitor() {
   
   useEffect(() => {
     fetchWebsites();
-  }, []);
+  }, [pagination.page, pagination.pageSize]); 
 
   const fetchWebsites = async () => {
     try {
