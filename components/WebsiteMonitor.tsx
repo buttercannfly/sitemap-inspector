@@ -71,21 +71,49 @@ export default function WebsiteMonitor() {
       const data = await response.json();
       
       if (data && data.data) {
-        // 按网站URL分组，每个网站只保留最新的一条记录
-        const websiteMap = new Map<string, Website>();
+        // 按网站URL分组，每个网站保留最多3条最新记录
+        const websiteGroups: Record<string, Website[]> = {};
+        
+        // 按照网站名称分组
         data.data.forEach((site: Website) => {
-          if (!websiteMap.has(site.website) || 
-              new Date(site.created_at) > new Date(websiteMap.get(site.website)!.created_at)) {
-            websiteMap.set(site.website, site);
+          if (!websiteGroups[site.website]) {
+            websiteGroups[site.website] = [];
           }
+          websiteGroups[site.website].push(site);
         });
         
-        // 转换为数组并排序（可选）
-        const uniqueWebsites = Array.from(websiteMap.values())
-          .sort((a, b) => a.website.localeCompare(b.website));
+        // 对每个分组，按创建时间排序并只保留最新的3条记录
+        const uniqueWebsites: Website[] = [];
+        Object.values(websiteGroups).forEach(sites => {
+          // 根据创建时间排序（最新的在前）
+          sites.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+          // 只保留最新的3条记录
+          const recentSites = sites.slice(0, 3);
+          uniqueWebsites.push(...recentSites);
+        });
+        
+        // 先按网站URL排序，再按创建时间排序
+        uniqueWebsites.sort((a, b) => {
+          // 首先按网站URL字母顺序排序
+          const urlCompare = a.website.localeCompare(b.website);
+          if (urlCompare !== 0) return urlCompare;
+          
+          // 如果是同一网站，按创建时间倒序排序（最新的在前）
+          return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+        });
         
         // 从唯一网站中截取当前页需要的数据
-        const paginatedWebsites = uniqueWebsites.slice(0, pagination.pageSize);
+        const paginatedWebsites: Website[] = [];
+        
+        // 获取唯一的网站URL
+        const uniqueUrls = [...new Set(uniqueWebsites.map(site => site.website))];
+        const paginatedUrls = uniqueUrls.slice((pagination.page - 1) * pagination.pageSize, pagination.page * pagination.pageSize);
+        
+        // 根据分页后的URL获取对应的网站记录
+        paginatedUrls.forEach(url => {
+          const sites = uniqueWebsites.filter(site => site.website === url);
+          paginatedWebsites.push(...sites);
+        });
         
         setWebsites(paginatedWebsites);
       } else {
@@ -183,6 +211,18 @@ export default function WebsiteMonitor() {
         }
         groups['Other'].push(site);
       }
+    });
+    
+    // 对每个域名下的网站，先按网站URL分组，再按创建时间排序
+    Object.keys(groups).forEach(domain => {
+      groups[domain].sort((a, b) => {
+        // 首先按网站URL字母顺序排序
+        const urlCompare = a.website.localeCompare(b.website);
+        if (urlCompare !== 0) return urlCompare;
+        
+        // 如果是同一网站，按创建时间倒序排序（最新的在前）
+        return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+      });
     });
     
     return groups;
@@ -292,65 +332,78 @@ export default function WebsiteMonitor() {
             
             {expandedDomains[domain] && (
               <div className="space-y-4 mt-4">
-                {siteGroup.map((site) => {
+                {siteGroup.map((site, index, sites) => {
                   const newUrls = compareUrls(site.urls, site.previous_urls || '');
+                  // 检查是否为同一网站的第一条记录
+                  const isFirst = index === 0 || sites[index - 1].website !== site.website;
+                  // 检查是否为同一网站的后续记录
+                  const isFollowUp = index > 0 && sites[index - 1].website === site.website;
                   
                   return (
-                    <div key={site.id} className="border rounded-lg p-4 bg-gray-50 dark:bg-gray-700">
+                    <div key={site.id} 
+                      className={`border rounded-lg p-4 ${isFollowUp ? 'ml-6 border-dashed bg-gray-50/50 dark:bg-gray-700/50' : 'bg-gray-50 dark:bg-gray-700'}`}
+                    >
                       <div className="flex items-center justify-between">
                         <div>
-                          <h3 className="text-lg font-semibold">{site.website}</h3>
+                          <h3 className="text-lg font-semibold">
+                            {site.website}
+                            {isFollowUp && <span className="ml-2 text-xs font-normal text-gray-500">历史记录</span>}
+                          </h3>
                           <p className="text-sm text-gray-500">
-                            Last updated: {new Date(site.created_at).toLocaleString()}
+                            抓取时间: {new Date(site.created_at).toLocaleString()}
                           </p>
                           <p className="text-sm text-gray-500">
-                            Total URLs: {site.url_count}
+                            总URL数: {site.url_count}
                           </p>
                         </div>
                         <div className="flex items-center gap-2">
-                          <button
-                            onClick={(e) => {
-                              e.preventDefault();
-                              handleRefresh(site);
-                            }}
-                            disabled={refreshingSites[site.id]}
-                            className="px-3 py-1 text-sm bg-gray-200 text-gray-700 rounded hover:bg-gray-300 transition-colors disabled:opacity-50 flex items-center gap-1"
-                          >
-                            {refreshingSites[site.id] ? (
-                              <>
-                                <svg className="animate-spin h-4 w-4 text-gray-700" viewBox="0 0 24 24">
-                                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
-                                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                                </svg>
-                                <span>刷新中</span>
-                              </>
-                            ) : (
-                              <>
-                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                                </svg>
-                                <span>重新抓取</span>
-                              </>
-                            )}
-                          </button>
-                          <button
-                            onClick={() => handleDelete(site.id)}
-                            className="px-3 py-1 text-sm bg-red-500 text-white rounded hover:bg-red-600"
-                          >
-                            删除
-                          </button>
-                          <a
-                            href={`/website/${site.id}`}
-                            className="px-3 py-1 text-sm bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors"
-                          >
-                            View URLs
-                          </a>
+                          {isFirst && (
+                            <>
+                              <button
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  handleRefresh(site);
+                                }}
+                                disabled={refreshingSites[site.id]}
+                                className="px-3 py-1 text-sm bg-gray-200 text-gray-700 rounded hover:bg-gray-300 transition-colors disabled:opacity-50 flex items-center gap-1"
+                              >
+                                {refreshingSites[site.id] ? (
+                                  <>
+                                    <svg className="animate-spin h-4 w-4 text-gray-700" viewBox="0 0 24 24">
+                                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                                    </svg>
+                                    <span>刷新中</span>
+                                  </>
+                                ) : (
+                                  <>
+                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                                    </svg>
+                                    <span>重新抓取</span>
+                                  </>
+                                )}
+                              </button>
+                              <button
+                                onClick={() => handleDelete(site.id)}
+                                className="px-3 py-1 text-sm bg-red-500 text-white rounded hover:bg-red-600"
+                              >
+                                删除
+                              </button>
+                              <a
+                                href={`/website/${site.id}`}
+                                className="px-3 py-1 text-sm bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors"
+                              >
+                                View URLs
+                              </a>
+                            </>
+                          )}
                         </div>
                       </div>
                       {newUrls.length > 0 && (
                         <div className="mt-4">
                           <p className="text-sm font-semibold text-green-600 dark:text-green-400">
-                            New URLs ({newUrls.length}):
+                            新增URL ({newUrls.length}):
                           </p>
                           <div className="mt-2 space-y-1">
                             {newUrls.map((url) => (
