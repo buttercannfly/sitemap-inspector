@@ -228,6 +228,40 @@ export default function WebsiteMonitor() {
     return groups;
   }
 
+  // 计算时间差异（几天前）
+  const getDaysAgo = (dateString: string): string => {
+    const date = new Date(dateString);
+    const now = new Date();
+    const diffTime = Math.abs(now.getTime() - date.getTime());
+    const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+    
+    if (diffDays === 0) {
+      const diffHours = Math.floor(diffTime / (1000 * 60 * 60));
+      if (diffHours === 0) {
+        const diffMinutes = Math.floor(diffTime / (1000 * 60));
+        return `${diffMinutes} 分钟前`;
+      }
+      return `${diffHours} 小时前`;
+    } else if (diffDays === 1) {
+      return "昨天";
+    } else {
+      return `${diffDays} 天前`;
+    }
+  };
+
+  // 检查网站是否有新的URL变化
+  const hasUrlChanges = (site: Website): boolean => {
+    // 检查URL数量是否发生变化
+    if (site.previous_urls) {
+      const previousUrlCount = getUrlCount(site.previous_urls);
+      const currentUrlCount = site.url_count;
+      
+      // 如果URL数量有变化，返回true
+      return currentUrlCount !== previousUrlCount;
+    }
+    return false;
+  };
+
   const getUrlCount = (urlString: string): number => {
     return urlString.split(',').filter(Boolean).length;
   };
@@ -308,129 +342,195 @@ export default function WebsiteMonitor() {
       </form>
 
       <div className="space-y-8">
-        {Object.entries(groupWebsitesByDomain(websites)).map(([domain, siteGroup]) => (
-          <div key={domain} className="border rounded-lg p-6 bg-white dark:bg-gray-800">
-            <button 
-              onClick={() => toggleDomain(domain)}
-              className="w-full flex items-center justify-between text-left"
-            >
-              <h2 className="text-xl font-bold pb-2">
-                {domain}
-                <span className="text-sm font-normal text-gray-500 ml-2">
-                  ({siteGroup.length} {siteGroup.length === 1 ? 'site' : 'sites'})
-                </span>
-              </h2>
-              <svg 
-                className={`w-6 h-6 transform transition-transform ${expandedDomains[domain] ? 'rotate-180' : ''}`} 
-                fill="none" 
-                stroke="currentColor" 
-                viewBox="0 0 24 24"
+        {Object.entries(groupWebsitesByDomain(websites)).map(([domain, siteGroup]) => {
+          // 获取每个域名下每个网站的最新记录
+          const latestSitesByUrl: Record<string, Website> = {};
+          siteGroup.forEach(site => {
+            if (!latestSitesByUrl[site.website] || 
+                new Date(site.created_at) > new Date(latestSitesByUrl[site.website].created_at)) {
+              latestSitesByUrl[site.website] = site;
+            }
+          });
+          
+          // 检查是否有任何网站有URL变化
+          const hasChanges = Object.values(latestSitesByUrl).some(site => hasUrlChanges(site));
+          
+          // 获取域名下最近一次的抓取时间
+          const latestCrawl = siteGroup.reduce((latest, site) => {
+            return new Date(site.created_at) > new Date(latest.created_at) ? site : latest;
+          }, siteGroup[0]);
+          
+          // 计算这个域名下所有网站最新数据的URL总数
+          const totalUrls = Object.values(latestSitesByUrl).reduce((sum, site) => sum + site.url_count, 0);
+          
+          // 计算URL数量变化（如果有前一次抓取）
+          let urlCountChange = 0;
+          Object.values(latestSitesByUrl).forEach(site => {
+            if (site.previous_urls) {
+              const prevCount = getUrlCount(site.previous_urls);
+              urlCountChange += (site.url_count - prevCount);
+            }
+          });
+          
+          return (
+            <div key={domain} className="border rounded-lg p-6 bg-white dark:bg-gray-800">
+              <button 
+                onClick={() => toggleDomain(domain)}
+                className="w-full flex items-center justify-between text-left"
               >
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-              </svg>
-            </button>
-            
-            {expandedDomains[domain] && (
-              <div className="space-y-4 mt-4">
-                {siteGroup.map((site, index, sites) => {
-                  const newUrls = compareUrls(site.urls, site.previous_urls || '');
-                  // 检查是否为同一网站的第一条记录
-                  const isFirst = index === 0 || sites[index - 1].website !== site.website;
-                  // 检查是否为同一网站的后续记录
-                  const isFollowUp = index > 0 && sites[index - 1].website === site.website;
-                  
-                  return (
-                    <div key={site.id} 
-                      className={`border rounded-lg p-4 ${isFollowUp ? 'ml-6 border-dashed bg-gray-50/50 dark:bg-gray-700/50' : 'bg-gray-50 dark:bg-gray-700'}`}
-                    >
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <h3 className="text-lg font-semibold">
-                            {site.website}
-                            {isFollowUp && <span className="ml-2 text-xs font-normal text-gray-500">历史记录</span>}
-                          </h3>
-                          <p className="text-sm text-gray-500">
-                            抓取时间: {new Date(site.created_at).toLocaleString()}
-                          </p>
-                          <p className="text-sm text-gray-500">
-                            总URL数: {site.url_count}
-                          </p>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          {isFirst && (
-                            <>
-                              <button
-                                onClick={(e) => {
-                                  e.preventDefault();
-                                  handleRefresh(site);
-                                }}
-                                disabled={refreshingSites[site.id]}
-                                className="px-3 py-1 text-sm bg-gray-200 text-gray-700 rounded hover:bg-gray-300 transition-colors disabled:opacity-50 flex items-center gap-1"
-                              >
-                                {refreshingSites[site.id] ? (
-                                  <>
-                                    <svg className="animate-spin h-4 w-4 text-gray-700" viewBox="0 0 24 24">
-                                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
-                                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                                    </svg>
-                                    <span>刷新中</span>
-                                  </>
-                                ) : (
-                                  <>
-                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                                    </svg>
-                                    <span>重新抓取</span>
-                                  </>
-                                )}
-                              </button>
-                              <button
-                                onClick={() => handleDelete(site.id)}
-                                className="px-3 py-1 text-sm bg-red-500 text-white rounded hover:bg-red-600"
-                              >
-                                删除
-                              </button>
-                              <a
-                                href={`/website/${site.id}`}
-                                className="px-3 py-1 text-sm bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors"
-                              >
-                                View URLs
-                              </a>
-                            </>
-                          )}
-                        </div>
-                      </div>
-                      {newUrls.length > 0 && (
-                        <div className="mt-4">
-                          <p className="text-sm font-semibold text-green-600 dark:text-green-400">
-                            新增URL ({newUrls.length}):
-                          </p>
-                          <div className="mt-2 space-y-1">
-                            {newUrls.map((url) => (
-                              <div 
-                                key={url} 
-                                className="text-sm break-all bg-green-50 dark:bg-green-900/20 p-2 rounded"
-                              >
-                                <a 
-                                  href={url}
-                                  target="_blank"
-                                  rel="noopener noreferrer" 
-                                  className="text-blue-600 hover:underline"
+                <div>
+                  <h2 className="text-xl font-bold pb-2 flex items-center">
+                    {domain}
+                    <span className="text-sm font-normal text-gray-500 ml-2">
+                      ({siteGroup.length} {siteGroup.length === 1 ? 'site' : 'sites'})
+                    </span>
+                    {(urlCountChange !== 0 || hasChanges) && (
+                      <span className="ml-2 px-2 py-1 text-xs font-bold bg-red-100 text-red-800 border border-red-300 rounded-full flex items-center">
+                        <span className="w-1.5 h-1.5 bg-red-600 rounded-full mr-1 animate-pulse"></span>
+                        NEW
+                      </span>
+                    )}
+                  </h2>
+                  <div className="flex items-center text-sm text-gray-500">
+                    <span>最近抓取: {new Date(latestCrawl.created_at).toLocaleDateString()} ({getDaysAgo(latestCrawl.created_at)})</span>
+                    <span className="mx-2">•</span>
+                    <span className="flex items-center">
+                      总URL: {totalUrls}
+                      {urlCountChange !== 0 && (
+                        <span className={`ml-2 px-2 py-0.5 text-xs font-medium rounded-full ${urlCountChange > 0 ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
+                          {urlCountChange > 0 ? `+${urlCountChange}` : urlCountChange}
+                        </span>
+                      )}
+                    </span>
+                  </div>
+                </div>
+                <svg 
+                  className={`w-6 h-6 transform transition-transform ${expandedDomains[domain] ? 'rotate-180' : ''}`} 
+                  fill="none" 
+                  stroke="currentColor" 
+                  viewBox="0 0 24 24"
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
+              
+              {expandedDomains[domain] && (
+                <div className="space-y-4 mt-4">
+                  {siteGroup.map((site, index, sites) => {
+                    const newUrls = compareUrls(site.urls, site.previous_urls || '');
+                    // 检查是否为同一网站的第一条记录
+                    const isFirst = index === 0 || sites[index - 1].website !== site.website;
+                    // 检查是否为同一网站的后续记录
+                    const isFollowUp = index > 0 && sites[index - 1].website === site.website;
+                    
+                    // 如果有前一条记录，计算URL数量的变化
+                    const urlCountDiff = isFollowUp ? 
+                      site.url_count - sites[index - 1].url_count : 
+                      (site.previous_urls ? site.url_count - getUrlCount(site.previous_urls) : 0);
+                    
+                    return (
+                      <div key={site.id} 
+                        className={`border rounded-lg p-4 ${isFollowUp ? 'ml-6 border-dashed bg-gray-50/50 dark:bg-gray-700/50' : 'bg-gray-50 dark:bg-gray-700'}`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <h3 className="text-lg font-semibold flex items-center">
+                              {site.website}
+                              {isFollowUp && <span className="ml-2 text-xs font-normal text-gray-500">历史记录</span>}
+                              {newUrls.length > 0 && isFirst && (
+                                <span className="ml-2 px-2 py-0.5 text-xs font-medium bg-green-100 text-green-800 rounded-full">
+                                  NEW
+                                </span>
+                              )}
+                            </h3>
+                            <p className="text-sm text-gray-500">
+                              抓取时间: {new Date(site.created_at).toLocaleString()} ({getDaysAgo(site.created_at)})
+                            </p>
+                            <p className="text-sm text-gray-500 flex items-center">
+                              总URL数: {site.url_count}
+                              {urlCountDiff !== 0 && (
+                                <span className={`ml-2 px-2 py-0.5 text-xs font-medium rounded-full ${urlCountDiff > 0 ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
+                                  {urlCountDiff > 0 ? `+${urlCountDiff}` : urlCountDiff}
+                                </span>
+                              )}
+                            </p>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            {isFirst && (
+                              <>
+                                <button
+                                  onClick={(e) => {
+                                    e.preventDefault();
+                                    handleRefresh(site);
+                                  }}
+                                  disabled={refreshingSites[site.id]}
+                                  className="px-3 py-1 text-sm bg-gray-200 text-gray-700 rounded hover:bg-gray-300 transition-colors disabled:opacity-50 flex items-center gap-1"
                                 >
-                                  {url}
+                                  {refreshingSites[site.id] ? (
+                                    <>
+                                      <svg className="animate-spin h-4 w-4 text-gray-700" viewBox="0 0 24 24">
+                                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                                      </svg>
+                                      <span>刷新中</span>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                                      </svg>
+                                      <span>重新抓取</span>
+                                    </>
+                                  )}
+                                </button>
+                                <button
+                                  onClick={() => handleDelete(site.id)}
+                                  className="px-3 py-1 text-sm bg-red-500 text-white rounded hover:bg-red-600"
+                                >
+                                  删除
+                                </button>
+                                <a
+                                  href={`/website/${site.id}`}
+                                  className="px-3 py-1 text-sm bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors"
+                                >
+                                  View URLs
                                 </a>
-                              </div>
-                            ))}
+                              </>
+                            )}
                           </div>
                         </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-        ))}
+                        {newUrls.length > 0 && (
+                          <div className="mt-4">
+                            <p className="text-sm font-semibold text-green-600 dark:text-green-400">
+                              新增URL ({newUrls.length}):
+                            </p>
+                            <div className="mt-2 space-y-1">
+                              {newUrls.map((url) => (
+                                <div 
+                                  key={url} 
+                                  className="text-sm break-all bg-green-50 dark:bg-green-900/20 p-2 rounded"
+                                >
+                                  <a 
+                                    href={url}
+                                    target="_blank"
+                                    rel="noopener noreferrer" 
+                                    className="text-blue-600 hover:underline"
+                                  >
+                                    {url}
+                                  </a>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          );
+        })}
       </div>
 
       <div className="mt-8 flex items-center justify-between">
