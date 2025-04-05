@@ -1,22 +1,35 @@
 import { useState, useEffect } from 'react';
 import { Website } from '@/lib/supabaseClient';
+import { useRouter } from 'next/router';
 
 export default function WebsiteMonitor() {
+  const router = useRouter();
   const [website, setWebsite] = useState('');
   const [websites, setWebsites] = useState<Website[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [expandedSites, setExpandedSites] = useState<Record<number, boolean>>({});
   const [expandedDomains, setExpandedDomains] = useState<Record<string, boolean>>({});
   const [refreshingSites, setRefreshingSites] = useState<Record<number, boolean>>({});
   const [paginationLoading, setPaginationLoading] = useState(false);
   const [pagination, setPagination] = useState({
-    page: 1,
-    pageSize: 10,
+    page: Number(router.query.page) || 1,
+    pageSize: Number(router.query.pageSize) || 10,
     total: 0
   });
   
-  // 使用useEffect监听分页状态变化，然后获取数据
+  // Update pagination when URL parameters change
+  useEffect(() => {
+    const page = Number(router.query.page) || 1;
+    const pageSize = Number(router.query.pageSize) || 10;
+    
+    setPagination(prev => ({
+      ...prev,
+      page,
+      pageSize
+    }));
+  }, [router.query.page, router.query.pageSize]);
+  
+  // Fetch websites when pagination changes
   useEffect(() => {
     fetchWebsites();
   }, [pagination.page, pagination.pageSize]); 
@@ -24,12 +37,57 @@ export default function WebsiteMonitor() {
   const fetchWebsites = async () => {
     try {
       setPaginationLoading(true);
-      const response = await fetch(`/api/websites?page=${pagination.page}&pageSize=${pagination.pageSize}`);
+      
+      // 首先获取总的唯一网站数
+      const countResponse = await fetch('/api/websites/count');
+      const countData = await countResponse.json();
+      const uniqueTotal = countData.count || 0;
+      
+      // 更新总数，用于计算正确的分页
+      setPagination(prev => ({ 
+        ...prev, 
+        total: uniqueTotal
+      }));
+      
+      if (uniqueTotal === 0) {
+        setWebsites([]);
+        setPaginationLoading(false);
+        return;
+      }
+      
+      // 计算需要获取的网站数量和页码
+      // 因为每个网站最多有3条记录，我们需要获取足够多的数据来确保有足够的唯一网站
+      const multiplier = 3;
+      const effectivePageSize = pagination.pageSize * multiplier;
+      
+      // 计算偏移量以获取正确的数据范围
+      const offset = (pagination.page - 1) * pagination.pageSize;
+      // 获取比当前页需要更多的数据，以确保我们有足够的唯一网站
+      const limit = pagination.pageSize * 2;
+      
+      // 获取网站数据
+      const apiPage = Math.floor(offset / (pagination.pageSize * multiplier)) + 1;
+      const response = await fetch(`/api/websites?page=${apiPage}&pageSize=${effectivePageSize}`);
       const data = await response.json();
       
       if (data && data.data) {
-        setWebsites(data.data);
-        setPagination(prev => ({ ...prev, total: data.total || 0 }));
+        // 按网站URL分组，每个网站只保留最新的一条记录
+        const websiteMap = new Map<string, Website>();
+        data.data.forEach((site: Website) => {
+          if (!websiteMap.has(site.website) || 
+              new Date(site.created_at) > new Date(websiteMap.get(site.website)!.created_at)) {
+            websiteMap.set(site.website, site);
+          }
+        });
+        
+        // 转换为数组并排序（可选）
+        const uniqueWebsites = Array.from(websiteMap.values())
+          .sort((a, b) => a.website.localeCompare(b.website));
+        
+        // 从唯一网站中截取当前页需要的数据
+        const paginatedWebsites = uniqueWebsites.slice(0, pagination.pageSize);
+        
+        setWebsites(paginatedWebsites);
       } else {
         setWebsites([]);
         setError('Invalid data format received');
@@ -61,8 +119,11 @@ export default function WebsiteMonitor() {
         throw new Error(errorData.error || 'Failed to add website');
       }
 
-      // 重置为第一页并更新数据
-      setPagination(prev => ({ ...prev, page: 1 }));
+      // Reset to first page and update router
+      router.push({
+        pathname: router.pathname,
+        query: { ...router.query, page: 1 }
+      });
       setWebsite('');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to add website');
@@ -71,16 +132,23 @@ export default function WebsiteMonitor() {
     }
   };
 
-  // 分页控制函数 - 只更新状态，不直接调用fetchWebsites
+  // Update URL when page changes
   const handlePageChange = (newPage: number) => {
     const totalPages = Math.ceil(pagination.total / pagination.pageSize);
     if (newPage < 1 || newPage > totalPages) return; // Prevent out-of-bounds
-    setPagination(prev => ({ ...prev, page: newPage }));
+    
+    router.push({
+      pathname: router.pathname,
+      query: { ...router.query, page: newPage }
+    }, undefined, { shallow: true });
   };
 
-  // 页面大小控制函数 - 只更新状态，不直接调用fetchWebsites
+  // Update URL when page size changes
   const handlePageSizeChange = (newSize: number) => {
-    setPagination(prev => ({ ...prev, pageSize: newSize, page: 1 }));
+    router.push({
+      pathname: router.pathname,
+      query: { ...router.query, pageSize: newSize, page: 1 }
+    }, undefined, { shallow: true });
   };
 
   const compareUrls = (current: string, previous: string) => {
@@ -88,13 +156,6 @@ export default function WebsiteMonitor() {
     const currentUrls = new Set(current.split(',').filter(Boolean));
     const previousUrls = new Set(previous.split(',').filter(Boolean));
     return Array.from(currentUrls).filter(url => !previousUrls.has(url));
-  };
-
-  const toggleExpand = (id: number) => {
-    setExpandedSites(prev => ({
-      ...prev,
-      [id]: !prev[id]
-    }));
   };
 
   const toggleDomain = (domain: string) => {
@@ -163,16 +224,19 @@ export default function WebsiteMonitor() {
           throw new Error('Failed to delete website');
         }
 
-        // 只更新状态，让useEffect触发获取数据
-        setPagination(prev => {
-          // 计算新的总页数
-          const totalPages = Math.ceil((prev.total - 1) / prev.pageSize);
-          // 如果当前页大于总页数，则回到最后一页
-          return { 
-            ...prev, 
-            page: prev.page > totalPages && totalPages > 0 ? totalPages : prev.page 
-          };
-        });
+        // Calculate new total and update page if needed
+        const newTotal = pagination.total - 1;
+        const totalPages = Math.ceil(newTotal / pagination.pageSize);
+        
+        if (pagination.page > totalPages && totalPages > 0) {
+          router.push({
+            pathname: router.pathname,
+            query: { ...router.query, page: totalPages }
+          }, undefined, { shallow: true });
+        } else {
+          // Just refresh the current page
+          fetchWebsites();
+        }
       } catch (error) {
         setError('Failed to delete website');
         console.error(error);
@@ -330,6 +394,8 @@ export default function WebsiteMonitor() {
         <span className="text-sm text-gray-600">
           {paginationLoading ? (
             'Loading...'
+          ) : pagination.total === 0 ? (
+            'No websites found'
           ) : (
             `Showing ${(pagination.page - 1) * pagination.pageSize + 1} - 
             ${Math.min(pagination.page * pagination.pageSize, pagination.total)} of 
